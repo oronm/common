@@ -1,0 +1,13 @@
+C:\Users\MediaCenter\Documents\Visual Studio 2010\Projects\ConnectBluetooth\Helpers\bin\Debug\Helpers.dll
+C:\Users\MediaCenter\Documents\Visual Studio 2010\Projects\ConnectBluetooth\Helpers\bin\Debug\Helpers.pdb
+C:\Users\MediaCenter\Documents\Visual Studio 2010\Projects\ConnectBluetooth\Helpers\obj\Debug\Helpers.csprojResolveAssemblyReference.cache
+C:\Users\MediaCenter\Documents\Visual Studio 2010\Projects\ConnectBluetooth\Helpers\obj\Debug\Helpers.dll
+C:\Users\MediaCenter\Documents\Visual Studio 2010\Projects\ConnectBluetooth\Helpers\obj\Debug\Helpers.pdb
+E:\Dev\ConnectBluetooth\Helpers\bin\Debug\Helpers.dll
+E:\Dev\ConnectBluetooth\Helpers\bin\Debug\Helpers.pdb
+E:\Dev\ConnectBluetooth\Helpers\obj\Debug\Helpers.dll
+E:\Dev\ConnectBluetooth\Helpers\obj\Debug\Helpers.pdb
+E:\Dev\Common\Helpers\bin\Debug\Helpers.dll
+E:\Dev\Common\Helpers\bin\Debug\Helpers.pdb
+E:\Dev\Common\Helpers\obj\Debug\Helpers.dll
+E:\Dev\Common\Helpers\obj\Debug\Helpers.pdb
