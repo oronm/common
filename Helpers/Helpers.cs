@@ -5,11 +5,14 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using log4net;
 
 namespace Helpers
 {
     public static class Helper
     {
+        private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+
         public static bool LoopAttempt<T1>(int maxAttempts, int timeoutSeconds, T1 state, Func<T1, bool> haltCondition, Func<T1> attemptedAction, Func<Exception, T1> exceptionAction = null, bool forceFirstTry = false)
         {
             int attempts = maxAttempts;
@@ -18,7 +21,7 @@ namespace Helpers
             {
                 forceFirstTry = false;
                 attempts--;
-                Console.WriteLine("\tAttempt {0}", maxAttempts - attempts);
+                log.InfoFormat("\tAttempt {0}", maxAttempts - attempts);
                 var lastattempt = DateTime.UtcNow;
 
                 try
@@ -66,18 +69,35 @@ namespace Helpers
             return actualTask.Result;
         }
 
+        public static CancellationTokenSource StartRepetativeTask(Action action, TimeSpan repeatDelay)
+        {
+            CancellationTokenSource cancellationSource = new CancellationTokenSource();
+            var task = new Task(new Action<object> (async (ctobject) => {
+                var ct = ((CancellationToken)(ctobject));
+
+                while (!ct.IsCancellationRequested)
+                {
+                    action();
+                    await Task.Delay(repeatDelay, ct);
+                }
+
+            }), cancellationSource.Token, TaskCreationOptions.LongRunning);
+            task.Start();
+            return cancellationSource;
+        }
+
         public static void StartProcess(string name, string args, int timeoutInMS)
         {
             var p = StartProcess(name, args);
             Task.Run(async delegate  { 
                 await Task.Delay(timeoutInMS);
                 p.Kill();
-                Console.WriteLine("Killed {0} {1} {2}", p.Id, name, args);
+                log.InfoFormat("Killed {0} {1} {2}", p.Id, name, args);
             });
         }
         public static Process StartProcess(string name, string args = null)
         {
-            Console.WriteLine("{0} {1}", name, args ?? string.Empty);
+            log.InfoFormat("{0} {1}", name, args ?? string.Empty);
             var p = new Process();
             p.StartInfo = new ProcessStartInfo()
             {

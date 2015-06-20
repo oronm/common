@@ -7,3 +7,5 @@ E:\Dev\Common\Helpers\bin\DeployService\Helpers.pdb
 E:\Dev\Common\Helpers\obj\DeployService\Helpers.csprojResolveAssemblyReference.cache
 E:\Dev\Common\Helpers\obj\DeployService\Helpers.dll
 E:\Dev\Common\Helpers\obj\DeployService\Helpers.pdb
+E:\Dev\Common\Helpers\bin\DeployService\log4net.dll
+E:\Dev\Common\Helpers\bin\DeployService\log4net.xml
