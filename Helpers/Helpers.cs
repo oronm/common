@@ -69,6 +69,23 @@ namespace Helpers
             return actualTask.Result;
         }
 
+        public static void RaiseSafely<T>(object sender, EventHandler<T> evt, T eventArgs)
+        {
+            var tmp = evt;
+            if (tmp != null)
+            {
+                try
+                {
+                    tmp(sender, eventArgs);
+                }
+                catch (Exception e)
+                {
+                    log.Error(string.Format("Error raising {0} for {1}", tmp.Method.Name, eventArgs), e);
+                }
+            }
+        }
+        
+
         public static CancellationTokenSource StartRepetativeTask(Action action, TimeSpan repeatDelay)
         {
             CancellationTokenSource cancellationSource = new CancellationTokenSource();
