@@ -134,7 +134,8 @@ public class IPInfo
             switch (methodType)
             {
                 case IPInfoMethodType.Netsh:
-                    dynamicDescriminator = (desc) => desc.ToLower() != "permanent";
+                    var filters = new string[] { "permanent", "incomplete" };
+                    dynamicDescriminator = (desc) => !filters.Contains(desc.ToLower()) && !desc.Contains("---");
                     resultMethod = GetNetshResult;
                     break;
                 case IPInfoMethodType.ARP:
@@ -144,7 +145,7 @@ public class IPInfo
                     break;
             }
 
-
+            
             foreach (var arp in resultMethod().Split(new char[] { '\n', '\r' }))
             {
                 // Parse out all the MAC / IP Address combinations
@@ -155,7 +156,8 @@ public class IPInfo
                                   select piece).ToArray();
 
                     if (pieces.Length == 3 && 
-                        (!dynamicOnly || (dynamicOnly && dynamicDescriminator(pieces[2]))))
+                        (!dynamicOnly || (dynamicOnly && dynamicDescriminator(pieces[2]))) &&
+                        isRealMacAddress(pieces[1]))
                     {
                         list.Add(new IPInfo(pieces[1], pieces[0]));
                     }
@@ -169,6 +171,14 @@ public class IPInfo
         {
             throw new Exception("IPInfo: Error Parsing 'arp -a' results", ex);
         }
+    }
+
+    private static bool isRealMacAddress(string mac)
+    {
+        mac = mac ?? "";
+        mac = mac.Trim().ToLower();
+        var filters = new string[] { "unreachable" };
+        return (!string.IsNullOrWhiteSpace(mac) && !filters.Contains(mac));
     }
 
     /// <summary>
@@ -236,7 +246,7 @@ public class IPInfo
 
         var ips = generateIps(subNets);
 
-        Parallel.ForEach(ips, ip => { ip.Ping(); });
+        Parallel.ForEach(ips, new ParallelOptions() { MaxDegreeOfParallelism=5 }, ip => { ip.Ping(); });
 
         return ips.Select(ipinfo => ipinfo.IPAddress).ToArray();
     }
