@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
+using System.Threading.Tasks;
 
 /// <summary>
 /// This class allows you to retrieve the IP Address and Host Name for a specific machine on the local network when you only know it's MAC Address.
@@ -57,17 +58,94 @@ public class IPInfo
         return ipinfo;
     }
 
+    public static List<IPInfo> GetIPInfoWithPings(IEnumerable<string> macAddresses = null)
+    {
+        return GetIPInfoWithPings(IPInfoMethodType.ARP, macAddresses);
+    }
+    public static List<IPInfo> GetIPInfoWithPings(IPInfoMethodType methodType, IEnumerable<string> macAddresses = null)
+    {
+        IEnumerable<IPInfo> ips = GetIPInfo(methodType);
+        if (macAddresses != null)
+            ips = filterMacAddresses(ips, macAddresses.Select(macaddress => parseMacFromString(macaddress)).ToArray());
+        Parallel.ForEach(ips, (ip) => { ip.Ping(); });
+        return GetIPInfo(methodType);
+    }
+
+    private static IEnumerable<IPInfo> filterMacAddresses(IEnumerable<IPInfo> ips, IEnumerable<string> macAddresses)
+    {
+        var set = new HashSet<string>(macAddresses);
+        return ips.Where(ipinfo => set.Contains(parseMacFromString(ipinfo.MacAddress)));
+    }
+
+    private static string parseMacFromString(string macAddressString)
+    {
+        if (string.IsNullOrWhiteSpace(macAddressString))
+            return macAddressString;
+
+        string[] stringsToRemove = { "\"", " ", ":", "-", @"\n", };
+        foreach (var stringToRemove in stringsToRemove)
+        {
+            macAddressString = macAddressString.Replace(stringToRemove, string.Empty);
+        }
+        return macAddressString.Trim().ToLower();
+    }
+
+
+    /// <param name="times">Number of echo requests, 1-10</param>
+    public void Ping(int times=2)
+    {
+        if (times < 1 || times > 10)
+        {
+            throw new ArgumentException("times");
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo("ping", string.Format("-n {0} {1}", times, IPAddress))
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+            }).WaitForExit(5000);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception(string.Format("IPInfo: Error pinging {0}", this.IPAddress), ex);
+        }
+    }
+
     /// <summary>
     /// Retrieves the IPInfo for All machines on the local network.
     /// </summary>
     /// <returns></returns>
-    public static List<IPInfo> GetIPInfo()
+    public static List<IPInfo> GetIPInfo(bool dynamicOnly = true)
+    {
+        return GetIPInfo(IPInfoMethodType.ARP, dynamicOnly);
+    }
+
+    public static List<IPInfo> GetIPInfo(IPInfoMethodType methodType, bool dynamicOnly = true)
     {
         try
         {
             var list = new List<IPInfo>();
 
-            foreach (var arp in GetARPResult().Split(new char[] { '\n', '\r' }))
+            Func<string> resultMethod;
+            Func<string,bool> dynamicDescriminator;
+
+            switch (methodType)
+            {
+                case IPInfoMethodType.Netsh:
+                    dynamicDescriminator = (desc) => desc.ToLower() != "permanent";
+                    resultMethod = GetNetshResult;
+                    break;
+                case IPInfoMethodType.ARP:
+                default:
+                    dynamicDescriminator = (desc) => desc.ToLower() == "dynamic";
+                    resultMethod = GetARPResult;
+                    break;
+            }
+
+
+            foreach (var arp in resultMethod().Split(new char[] { '\n', '\r' }))
             {
                 // Parse out all the MAC / IP Address combinations
                 if (!string.IsNullOrEmpty(arp))
@@ -75,7 +153,9 @@ public class IPInfo
                     var pieces = (from piece in arp.Split(new char[] { ' ', '\t' })
                                   where !string.IsNullOrEmpty(piece)
                                   select piece).ToArray();
-                    if (pieces.Length == 3)
+
+                    if (pieces.Length == 3 && 
+                        (!dynamicOnly || (dynamicOnly && dynamicDescriminator(pieces[2]))))
                     {
                         list.Add(new IPInfo(pieces[1], pieces[0]));
                     }
@@ -97,13 +177,23 @@ public class IPInfo
     /// <returns></returns>
     private static string GetARPResult()
     {
+        return getCmdResult("arp", "-a");
+    }
+    private static string GetNetshResult()
+    {
+        return getCmdResult("netsh", "interface ip show neighbors");
+    }
+
+    private static string getCmdResult(string command, string args)
+    {
         Process p = null;
         string output = string.Empty;
 
         try
         {
-            p = Process.Start(new ProcessStartInfo("arp", "-a")
+            p = Process.Start(new ProcessStartInfo(command, args)
             {
+                
                 CreateNoWindow = true,
                 UseShellExecute = false,
                 RedirectStandardOutput = true
@@ -115,7 +205,7 @@ public class IPInfo
         }
         catch (Exception ex)
         {
-            throw new Exception("IPInfo: Error Retrieving 'arp -a' Results", ex);
+            throw new Exception(string.Format("IPInfo: Error Retrieving '{0} {1}' Results", command, args), ex);
         }
         finally
         {
@@ -128,5 +218,71 @@ public class IPInfo
         return output;
     }
 
+
+    public static string[] BroadCastPing(string subNet)
+    {
+        return BroadCastPing(new string[] { subNet });
+    }
+    public static string[] BroadCastPing(params string[] subNets)
+    {
+        if (subNets == null || subNets.Length == 0)
+        {
+            subNets = detectSubnets();
+        }
+        if (subNets == null || subNets.Length == 0)
+        {
+            return new string[]{};
+        }
+
+        var ips = generateIps(subNets);
+
+        Parallel.ForEach(ips, ip => { ip.Ping(); });
+
+        return ips.Select(ipinfo => ipinfo.IPAddress).ToArray();
+    }
+
+    private static IPInfo[] generateIps(string[] subNets)
+    {
+        int minRange = 1;
+        int maxRange = 254;
+        var subNetsIps = new List<IPInfo>((maxRange - minRange + 1)*subNets.Length);
+        for (int subnetIndex = 0; subnetIndex < subNets.Length; subnetIndex++)
+        {
+            for (int i = minRange; i <= maxRange; i++)
+            {
+                subNetsIps.Add(new IPInfo("", string.Format("{0}.{1}", subNets[subnetIndex], i)));
+            }
+        }
+
+        return subNetsIps.ToArray();
+    }
+
+    private static string[] detectSubnets()
+    {
+        var ips = GetIPInfo();
+        var subnets =
+            from ip in ips
+            group ip by extractSubnet(ip) into subnetsgroup
+            select subnetsgroup.Key;
+
+        return subnets.ToArray();
+    }
+
+    private static string extractSubnet(IPInfo ip)
+    {
+        var parts = ip.IPAddress.Split('.');
+        if (parts.Length < 3) return string.Empty;
+
+        return string.Join(".", parts.Take(3));
+    }
+
+
     #endregion
 }
+
+public enum IPInfoMethodType
+{
+    ARP,
+    Netsh
+}
+
